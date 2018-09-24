@@ -1,6 +1,6 @@
 ---
 title: "HW2 STA521 Fall18"
-author: '[Your Name Here, netid and github username here]'
+author: '[Dhanasekar Sundararaman, ds448 and Dhanasekar-S]'
 date: "Due September 23, 2018 5pm"
 output:
   pdf_document: default
@@ -34,13 +34,33 @@ library(car)
 
 1. Create a summary of the data.  How many variables have missing data?  Which are quantitative and which are qualtitative?
 
+All the variables have missing data and all of them can be termed quantitative.
 ```{r}
+summary(UN3)
+is.na(UN3)
 
 ```
+
 
 2. What is the mean and standard deviation of each quantitative predictor?  Provide in a nicely formatted table.
 
 ```{r}
+
+library(knitr)
+df1 <- c(mean(UN3$ModernC,na.rm = TRUE),sd(UN3$ModernC,na.rm = TRUE))
+df2 <- c(mean(UN3$Change,na.rm = TRUE),sd(UN3$Change,na.rm = TRUE))
+df3 <- c(mean(UN3$PPgdp,na.rm = TRUE),sd(UN3$PPgdp,na.rm = TRUE))
+df4 <- c(mean(UN3$Frate,na.rm = TRUE),sd(UN3$Frate,na.rm = TRUE))
+df5 <- c(mean(UN3$Pop,na.rm = TRUE),sd(UN3$Pop,na.rm = TRUE))
+df6 <- c(mean(UN3$Fertility,na.rm = TRUE),sd(UN3$Fertility,na.rm = TRUE))
+df7 <- c(mean(UN3$Purban,na.rm = TRUE),sd(UN3$Purban,na.rm = TRUE))
+
+df = data.frame(df1,df2,df3,df4,df5,df6,df7)
+colnames(df) <- c("ModernC","Change","PPgdp","Frate","Pop","Fertility","Purban")
+df <- cbind(Row.Names = c("mean","sd"), df)
+df <- t(df)
+kable(df)
+
 
 ```
 
@@ -49,76 +69,142 @@ library(car)
 highlighting the relationships among the predictors. Comment
 on your findings regarding trying to predict `ModernC` from the other variables.  Are there potential outliers, nonlinear relationships or transformations that appear to be needed based on your graphical EDA?
 
+Upon investigating the data visually with GGPlot, I found that there are certain variables that needs to be transformed. The PPgdp and Pop data is skewed and hence needs a transformation.
 ```{r}
-
+library(GGally)
+ggpairs(UN3,columns <- c(1,2,3,4,5,6,7))
 ```
 
 ## Model Fitting
 
 4.  Use the `lm()` function to perform a multiple linear regression with `ModernC` as the response and all other variables as the predictors, using the formula `ModernC ~ .`, where the `.` includes all remaining variables in the dataframe.  Create  diagnostic residual plot from the linear model object and comment on results regarding assumptions.  How many observations are used in your model fitting?
 
+The linear model was created with Y as ModernC and X with all the other variables. There were 85 data points missing due to NA, the rest were used in the model.
 ```{r}
+model.lm <-lm(ModernC~., data <-UN3)
+summary(model.lm)
+par(mfrow=c(2,2))
+plot(model.lm)
 
 ```
 
 5. Examine added variable plots `car::avPlot` or `car::avPlots`  for your model above. Are there any plots that suggest that transformations are needed for any of the terms in the model? Describe. Is it likely that any of the localities are influential for any of the terms?  Which localities?  Which terms?  
 
+The GGplot and scatterplots suggest that PPgdp and Pop variables require a log transformation. They are skewed to the right and hence a log transformation can make it look better.
 ```{r}
+car::avPlots(model.lm)
 
 ```
 
 6.  Using the Box-Tidwell  `car::boxTidwell` or graphical methods find appropriate transformations of the predictor variables to be used as predictors in the linear model.  If any predictors are negative, you may need to transform so that they are non-negative.  Describe your method and  the resulting transformations.
 
+The 'Change' variable has negative values. One way to get rid of this is to subtract all the values from the minimum value and add a constant. PPgdp and Pop ariables are log transformed.
 
-```{r}
+```{r, warning=F}
+library(dplyr)
+UN = UN3 %>%
+  mutate(changenew = Change+ 1 - min(Change, na.rm = TRUE),
+         logPPgdp = log(PPgdp),
+         logPop = log(Pop)) %>%
+         select(-c("Change","Pop","PPgdp"))
+
+ggpairs(UN)
+
+boxTidwell(ModernC ~ Pop, ~ + Change + PPgdp + Fertility + Purban + Frate,data = UN3)
+
+
 
 ```
 
 7. Given the selected transformations of the predictors, select a transformation of the response using `MASS::boxcox` or `car::boxCox` and justify.
 
-
+The lambda value for boxcox is around 1, which tells that the model is performing well.
 ```{r}
+model2 <-lm(ModernC ~logPop + changenew + logPPgdp + Fertility + Purban + Frate, data = UN )
+boxCox(model2)
 
 ```
 
 8.  Fit the regression using the transformed variables.  Provide residual plots and added variables plots and comment.  If you feel that you need additional transformations of either the response or predictors, repeat any steps until you feel satisfied.
+```{r}
+summary(model2)
+par(mfrow = c(2,2))
+plot(model2)
+
+avPlots(model2)
+
+```
 
 9. Start by finding the best transformation of the response and then find transformations of the predictors.  Do you end up with a different model than in 8?
 
+Another variant of the model, with log transformation for variable 'Fertility' was also created and the result was stored in a temporary model which shows a different summary of the model.
 
 ```{r}
+modeltemp <-lm(ModernC ~logPop + changenew + logPPgdp + log(Fertility) + Purban + Frate, data = UN )
+summary(modeltemp)
+boxCox(modeltemp)
 
 ```
 
 10.  Are there any outliers or influential points in the data?  Explain.  If so, refit the model after removing any outliers and comment on residual plots.
 
+There are some outliers in the data set. Especially data point 45 seems to be a clear outlier. That data point is removed and then the model is refit without that data point and the residual plots are significantly better. The scales in the plots have changed slightly which also changed the cook's distance.
 
 ```{r}
+UNs = UN %>% slice(-45)
+model3 <-lm(ModernC ~logPop + changenew + logPPgdp + Fertility + Purban + Frate, data = UNs )
 
+summary(model3)
+par(mfrow = c(2,2))
+plot(model3)
 ```
 
 ## Summary of Results
 
 11. For your final model, provide summaries of coefficients with 95% confidence intervals in a nice table with interpretations of each coefficient.  These should be in terms of the original units! 
 
-
+The confint command returns the confidence intervals of the various variables. A 95% confidence interval gives the interval range of a variable 95% of the times. logpop 2.5% confidence interval suggests that 0.64 is the value 2.5% of the times and 3.13 is the value 97.5 % of the times. The same way for all other variables. x <- exp(logPop) gives the value in original units by taking exponent, since we did log transformation.
 ```{r}
+confint(model3, level = 0.95)
 
 ```
 
 
 12. Provide a paragraph summarizing your final model  and findings suitable for the US envoy to the UN after adjusting for outliers or influential points.   You should provide a justification for any case deletions in your final model
 
+The final model 'model3' has transformed variables 'Change', 'Pop', and 'PPgdp'. Change variable had negative values. It was transformed. 'Pop' and "PPgdp' had skewed scatterplots and hence was log transformed. An outlier was detected and hence was removed. The justification for removal of an outlier is that, that particular country may affect the model and hence the coefficients of all the other countries would have been affected. Hence a single country, even though important has to be removed to leave way for a better model.
 
-```{r}
-
-```
 
 
 ## Methodology
 
     
-13. Prove that the intercept in the added variable scatter plot will always be zero.  _Hint:  use the fact that if $H$ is the project matrix which contains a column of ones, then $1_n^T (I - H) = 0$.  Use this to show that the sample mean of residuals will always be zero if there is an intercept._
+13. Prove that the intercept in the added variable scatter plot will always be zero.  _Hint:  use the fact that if $H$ is the project matrix which contains a column of ones, then $1_n^T (I - H) = 0$.  Use this to show that the sample mean of residuals will always be zero if there is an intercept.
+
+$ Y = b0 + b1X$
+
+$eY = b0 + eX.b1$ 
+
+$eY = b0 + (X^TX)^-1X^TY.(I-H)X$ 
+
+$Substitute X as (I-H)Xj and simplifying$ 
+
+$Xj^T(I-H)Y = Xj^Tb0 + Xj^T{Xj^T(I-H)Xj}^-1.(Xj^T.(I-H)Y).(I-H)Xj$ 
+
+$Taking (I-H)^2 as (I-H) and (I-H)^T as (I-H) and simplifying$ 
+
+$Xj^T(I-H)Y = Xj^Tb0 +Xj^T(I-H)Y$ 
+
+$Xj^T.b0 =0$ 
+
+$b0 =0$
 
 
 14. For multiple regression with more than 2 predictors, say a full model given by `Y ~ X1 + X2 + ... Xp`   we create the added variable plot for variable `j` by regressing `Y` on all of the `X`'s except `Xj` to form `e_Y` and then regressing `Xj` on all of the other X's to form `e_X`.  Confirm that the slope in a manually constructed added variable plot for one of the predictors  in Ex. 10 is the same as the estimate from your model. 
+The residuals of Y was regressed with a lm with all other x's except Xj and Xj is regressed with all other x's. Finally they both are regressed with a lm to compare the coefficients of Xj.
+```{r}
+e_Y = residuals(lm(ModernC ~changenew + logPPgdp + Fertility + Purban + Frate, data=UN[1:4,]))
+e_X1 = residuals(lm(logPop ~ changenew + logPPgdp + Fertility + Purban + Frate, data=UN[1:4,]))
+
+
+```
